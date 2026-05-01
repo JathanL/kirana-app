@@ -1,18 +1,7 @@
 import { useState } from "react";
 import Scanner from "./Scanner";
+import { supabase } from "./supabase";
 import "./App.css";
-import { supabase } from './supabase'
-
-const PRODUCTS = {
-  "8901030868484": { name: "Tata Salt 1kg", price: 28 },
-  "8901499002211": { name: "Aashirvaad Atta 5kg", price: 270 },
-  "8906000000004": { name: "Amul Butter 100g", price: 56 },
-  "8901058851773": { name: "Maggi Noodles 70g", price: 14 },
-  "8901030912117": { name: "Tata Tea Gold 250g", price: 105 },
-  "8901764100014": { name: "Parle-G Biscuits 80g", price: 10 },
-  "8901526109072": { name: "Sunflower Oil 1L", price: 148 },
-  "8901088053750": { name: "Colgate ToothPaste 100g", price: 65 },
-};
 
 function App() {
   const [activeTab, setActiveTab] = useState("billing");
@@ -21,61 +10,7 @@ function App() {
   const [todayTotal, setTodayTotal] = useState(0);
   const [bills, setBills] = useState([]);
 
-  const handleScan = async (barcode) => {
-  setShowScanner(false);
-
-  // First check our own database
-  const { data: localProduct } = await supabase
-    .from('products')
-    .select('*')
-    .eq('barcode', barcode)
-    .single();
-
-  if (localProduct) {
-    addItemToBill(barcode, localProduct.name, localProduct.price);
-    return;
-  }
-
-  // If not found locally, try Open Food Facts API
-  try {
-    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-    const data = await res.json();
-
-    if (data.status === 1) {
-      const name = data.product.product_name || 'Unknown Product';
-      const price = 0;
-      promptPrice(barcode, name, price);
-    } else {
-      promptPrice(barcode, '', 0);
-    }
-  } catch (err) {
-    promptPrice(barcode, '', 0);
-  }
-};
-
-const promptPrice = async (barcode, suggestedName, suggestedPrice) => {
-  const name = window.prompt(`Product name:`, suggestedName || '');
-  if (!name) return;
-  const price = parseFloat(window.prompt(`Price (₹):`, suggestedPrice || ''));
-  if (isNaN(price)) return;
-
-  // Save to our products table for next time
-  await supabase.from('products').insert([{ barcode, name, price }]);
-  addItemToBill(barcode, name, price);
-};
-
-const addItemToBill = (barcode, name, price) => {
-  setBillItems((prev) => {
-    const existing = prev.find((i) => i.barcode === barcode);
-    if (existing) {
-      return prev.map((i) =>
-        i.barcode === barcode ? { ...i, qty: i.qty + 1 } : i
-      );
-    }
-    return [...prev, { barcode, name, price, qty: 1 }];
-  });
-};
-    setShowScanner(false);
+  const addItemToBill = (barcode, name, price) => {
     setBillItems((prev) => {
       const existing = prev.find((i) => i.barcode === barcode);
       if (existing) {
@@ -83,8 +18,45 @@ const addItemToBill = (barcode, name, price) => {
           i.barcode === barcode ? { ...i, qty: i.qty + 1 } : i
         );
       }
-      return [...prev, { barcode, name: product.name, price: product.price, qty: 1 }];
+      return [...prev, { barcode, name, price, qty: 1 }];
     });
+  };
+
+  const promptPrice = async (barcode, suggestedName, suggestedPrice) => {
+    const name = window.prompt(`Product name:`, suggestedName || "");
+    if (!name) return;
+    const price = parseFloat(window.prompt(`Price (₹):`, suggestedPrice || ""));
+    if (isNaN(price)) return;
+    await supabase.from("products").insert([{ barcode, name, price }]);
+    addItemToBill(barcode, name, price);
+  };
+
+  const handleScan = async (barcode) => {
+    setShowScanner(false);
+
+    const { data: localProduct } = await supabase
+      .from("products")
+      .select("*")
+      .eq("barcode", barcode)
+      .single();
+
+    if (localProduct) {
+      addItemToBill(barcode, localProduct.name, localProduct.price);
+      return;
+    }
+
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const data = await res.json();
+      if (data.status === 1) {
+        const name = data.product.product_name || "Unknown Product";
+        promptPrice(barcode, name, 0);
+      } else {
+        promptPrice(barcode, "", 0);
+      }
+    } catch (err) {
+      promptPrice(barcode, "", 0);
+    }
   };
 
   const changeQty = (barcode, delta) => {
@@ -103,29 +75,29 @@ const addItemToBill = (barcode, name, price) => {
   const gst = Math.round(subtotal * 0.05);
   const total = subtotal + gst;
 
- const finalizeBill = async () => {
-  if (billItems.length === 0) return;
+  const finalizeBill = async () => {
+    if (billItems.length === 0) return;
 
-  const { error } = await supabase.from('bills').insert([{
-    total: total,
-    subtotal: subtotal,
-    gst: gst,
-    items: billItems,
-  }]);
+    const { error } = await supabase.from("bills").insert([{
+      total,
+      subtotal,
+      gst,
+      items: billItems,
+    }]);
 
-  if (error) {
-    alert('Error saving bill: ' + error.message);
-    return;
-  }
+    if (error) {
+      alert("Error saving bill: " + error.message);
+      return;
+    }
 
-  setTodayTotal((prev) => prev + total);
-  setBills((prev) => [
-    { time: new Date().toLocaleTimeString(), amount: total, items: billItems.length },
-    ...prev,
-  ]);
-  setBillItems([]);
-  alert('Bill saved! ₹' + total + ' added to today\'s total.');
-};
+    setTodayTotal((prev) => prev + total);
+    setBills((prev) => [
+      { time: new Date().toLocaleTimeString(), amount: total, items: billItems.length },
+      ...prev,
+    ]);
+    setBillItems([]);
+    alert("Bill saved! ₹" + total + " added to today's total.");
+  };
 
   return (
     <div className="app">
@@ -149,7 +121,6 @@ const addItemToBill = (barcode, name, price) => {
         {activeTab === "billing" && (
           <div>
             {showScanner && <Scanner onScan={handleScan} />}
-
             <button className="scan-btn" onClick={() => setShowScanner(!showScanner)}>
               {showScanner ? "✕ Close Scanner" : "📷 Scan Barcode"}
             </button>
