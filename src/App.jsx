@@ -21,10 +21,60 @@ function App() {
   const [todayTotal, setTodayTotal] = useState(0);
   const [bills, setBills] = useState([]);
 
-  const handleScan = (barcode) => {
-    const product = PRODUCTS[barcode];
-    if (!product) return;
+  const handleScan = async (barcode) => {
+  setShowScanner(false);
 
+  // First check our own database
+  const { data: localProduct } = await supabase
+    .from('products')
+    .select('*')
+    .eq('barcode', barcode)
+    .single();
+
+  if (localProduct) {
+    addItemToBill(barcode, localProduct.name, localProduct.price);
+    return;
+  }
+
+  // If not found locally, try Open Food Facts API
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+    const data = await res.json();
+
+    if (data.status === 1) {
+      const name = data.product.product_name || 'Unknown Product';
+      const price = 0;
+      promptPrice(barcode, name, price);
+    } else {
+      promptPrice(barcode, '', 0);
+    }
+  } catch (err) {
+    promptPrice(barcode, '', 0);
+  }
+};
+
+const promptPrice = async (barcode, suggestedName, suggestedPrice) => {
+  const name = window.prompt(`Product name:`, suggestedName || '');
+  if (!name) return;
+  const price = parseFloat(window.prompt(`Price (₹):`, suggestedPrice || ''));
+  if (isNaN(price)) return;
+
+  // Save to our products table for next time
+  await supabase.from('products').insert([{ barcode, name, price }]);
+  addItemToBill(barcode, name, price);
+};
+
+const addItemToBill = (barcode, name, price) => {
+  setBillItems((prev) => {
+    const existing = prev.find((i) => i.barcode === barcode);
+    if (existing) {
+      return prev.map((i) =>
+        i.barcode === barcode ? { ...i, qty: i.qty + 1 } : i
+      );
+    }
+    return [...prev, { barcode, name, price, qty: 1 }];
+  });
+};
     setShowScanner(false);
     setBillItems((prev) => {
       const existing = prev.find((i) => i.barcode === barcode);
