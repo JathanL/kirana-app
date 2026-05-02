@@ -215,3 +215,122 @@ body {
   border: 1.5px dashed #e0e0e0;
   border-radius: 12px;
 }
+/* Login page */
+.login-page {
+  min-height: 100vh;
+  background: linear-gradient(160deg, #1a472a, #2d6a4f);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px 20px;
+}
+
+.login-header { text-align: center; color: white; margin-bottom: 28px; }
+.login-logo { font-size: 52px; margin-bottom: 10px; }
+.login-title { font-size: 28px; font-weight: 800; }
+.login-sub { font-size: 14px; opacity: 0.75; margin-top: 4px; }
+
+.login-card {
+  background: white;
+  border-radius: 20px;
+  padding: 24px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+.login-tabs {
+  display: flex;
+  background: #f0f4f0;
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 20px;
+}
+
+.ltab {
+  flex: 1; padding: 9px;
+  border: none; background: none;
+  border-radius: 8px; font-size: 14px;
+  font-weight: 500; cursor: pointer; color: #888;
+}
+
+.ltab.active { background: #1a472a; color: white; font-weight: 600; }
+
+.login-form { display: flex; flex-direction: column; gap: 6px; }
+
+.form-label { font-size: 12px; font-weight: 600; color: #555; margin-top: 6px; }
+
+.login-form input {
+  padding: 11px 14px;
+  border: 1.5px solid #e8e8e8;
+  border-radius: 10px;
+  font-size: 14px;
+  background: #fafafa;
+}
+
+.form-error { color: #e74c3c; font-size: 12px; text-align: center; }
+
+.login-btn {
+  margin-top: 10px;
+  padding: 14px;
+  background: linear-gradient(135deg, #1a472a, #2d6a4f);
+  color: white; border: none;
+  border-radius: 12px; font-size: 15px;
+  font-weight: 600; cursor: pointer;
+}
+
+.login-footer { color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 20px; }
+
+/* Logout button */
+.logout-btn {
+  background: rgba(255,255,255,0.2);
+  color: white; border: none;
+  padding: 6px 12px; border-radius: 8px;
+  font-size: 12px; cursor: pointer;
+}
+
+/* Bill overlay */
+.bill-overlay {
+  min-height: 100vh;
+  background: #f0f4f0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px;
+}
+
+.bill-print {
+  background: white;
+  width: 100%;
+  max-width: 320px;
+  padding: 20px;
+  border-radius: 12px;
+  font-family: monospace;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+}
+
+.bill-shop-name { font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 4px; }
+.bill-shop-info { font-size: 12px; text-align: center; color: #555; }
+.bill-divider { font-size: 11px; color: #bbb; margin: 8px 0; text-align: center; }
+.bill-meta { display: flex; justify-content: space-between; font-size: 11px; color: #666; }
+
+.bill-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+.bill-table th { font-size: 11px; color: #888; padding: 4px 0; border-bottom: 1px dashed #eee; }
+.bill-table td { padding: 5px 0; }
+
+.bill-total-line { display: flex; justify-content: space-between; font-size: 16px; font-weight: 800; }
+.bill-thank { text-align: center; font-size: 13px; color: #555; margin-top: 6px; }
+.bill-powered { text-align: center; font-size: 10px; color: #bbb; margin-top: 4px; }
+
+.bill-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+  margin-top: 16px;
+}
+
+@media print {
+  .bill-actions { display: none; }
+  .bill-overlay { padding: 0; background: white; }
+}

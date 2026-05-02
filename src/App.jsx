@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Scanner from "./Scanner";
+import Login from "./Login";
+import Bill from "./Bill";
 import { supabase } from "./supabase";
 import "./App.css";
 
 const ADMIN_PASSWORD = "shop123";
 
 function App() {
+  const [shop, setShop] = useState(null);
   const [activeTab, setActiveTab] = useState("billing");
   const [billItems, setBillItems] = useState([]);
   const [showScanner, setShowScanner] = useState(false);
@@ -15,14 +18,23 @@ function App() {
   const [showSummary, setShowSummary] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [wrongPassword, setWrongPassword] = useState(false);
+  const [showBill, setShowBill] = useState(false);
+  const [lastBillItems, setLastBillItems] = useState([]);
+  const [lastTotal, setLastTotal] = useState(0);
 
-  const checkPassword = () => {
-    if (passwordInput === ADMIN_PASSWORD) {
-      setShowSummary(true);
-      setWrongPassword(false);
-    } else {
-      setWrongPassword(true);
-    }
+  useEffect(() => {
+    const saved = localStorage.getItem("kirana-shop");
+    if (saved) setShop(JSON.parse(saved));
+  }, []);
+
+  const handleLogin = (shopData) => {
+    localStorage.setItem("kirana-shop", JSON.stringify(shopData));
+    setShop(shopData);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("kirana-shop");
+    setShop(null);
   };
 
   const addItemToBill = (barcode, name, price) => {
@@ -84,7 +96,7 @@ function App() {
   const finalizeBill = async () => {
     if (billItems.length === 0) return;
     const { error } = await supabase.from("bills").insert([{
-      total, subtotal: total, gst: 0, items: billItems,
+      total, subtotal: total, gst: 0, items: billItems, shop_id: shop.id,
     }]);
     if (error) { alert("Error saving bill: " + error.message); return; }
     setTodayTotal((prev) => prev + total);
@@ -92,8 +104,10 @@ function App() {
       { time: new Date().toLocaleTimeString(), amount: total, items: billItems.length },
       ...prev,
     ]);
+    setLastBillItems([...billItems]);
+    setLastTotal(total);
     setBillItems([]);
-    alert("Bill saved! ₹" + total);
+    setShowBill(true);
   };
 
   const loadProducts = async () => {
@@ -120,18 +134,28 @@ function App() {
     loadProducts();
   };
 
+  const checkPassword = () => {
+    if (passwordInput === ADMIN_PASSWORD) {
+      setShowSummary(true); setWrongPassword(false);
+    } else { setWrongPassword(true); }
+  };
+
+  if (!shop) return <Login onLogin={handleLogin} />;
+
+  if (showBill) return (
+    <Bill shop={shop} items={lastBillItems} total={lastTotal} onClose={() => setShowBill(false)} />
+  );
+
   return (
     <div className="app">
-
-      {/* Header */}
       <div className="header">
         <div>
-          <h1>🛒 KiranaQuick</h1>
-          <p className="header-date">{new Date().toDateString()}</p>
+          <h1>🛒 {shop.shop_name}</h1>
+          <p className="header-date">{shop.address}</p>
         </div>
+        <button className="logout-btn" onClick={handleLogout}>Logout</button>
       </div>
 
-      {/* Tabs */}
       <div className="tabs">
         <button className={activeTab === "billing" ? "tab active" : "tab"} onClick={() => setActiveTab("billing")}>🧾 Bill</button>
         <button className={activeTab === "summary" ? "tab active" : "tab"} onClick={() => { setActiveTab("summary"); setShowSummary(false); setPasswordInput(""); }}>📊 Sales</button>
@@ -139,16 +163,12 @@ function App() {
       </div>
 
       <div className="content">
-
-        {/* BILLING TAB */}
         {activeTab === "billing" && (
           <div>
             {showScanner && <Scanner onScan={handleScan} />}
-
             <button className="scan-btn" onClick={() => setShowScanner(!showScanner)}>
               {showScanner ? "✕ Close Scanner" : "📷 Scan Barcode"}
             </button>
-
             {billItems.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon">🛍️</div>
@@ -172,7 +192,6 @@ function App() {
                     <button className="remove-btn" onClick={() => removeItem(item.barcode)}>×</button>
                   </div>
                 ))}
-
                 <div className="bill-footer">
                   <div className="bill-total-row">
                     <span>Total Amount</span>
@@ -188,7 +207,6 @@ function App() {
           </div>
         )}
 
-        {/* SALES SUMMARY TAB - password protected */}
         {activeTab === "summary" && (
           <div>
             {!showSummary ? (
@@ -196,14 +214,10 @@ function App() {
                 <div className="lock-icon">🔒</div>
                 <p className="lock-title">Owner Access Only</p>
                 <p className="lock-sub">Enter your password to view sales</p>
-                <input
-                  type="password"
-                  placeholder="Enter password"
-                  value={passwordInput}
+                <input type="password" placeholder="Enter password" value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && checkPassword()}
-                  className="password-input"
-                />
+                  className="password-input" />
                 {wrongPassword && <p className="wrong-pass">Wrong password!</p>}
                 <button className="generate-btn" onClick={checkPassword}>View Sales →</button>
               </div>
@@ -232,7 +246,6 @@ function App() {
           </div>
         )}
 
-        {/* ADMIN TAB */}
         {activeTab === "admin" && (
           <div>
             <p className="admin-heading">Add products with fixed prices</p>
@@ -242,7 +255,6 @@ function App() {
               <input id="admin-price" placeholder="Price (₹)" type="number" />
               <button className="generate-btn" onClick={addProduct}>+ Add Product</button>
             </div>
-
             <div style={{ marginTop: "20px" }}>
               <p className="admin-list-title">Saved Products ({productList.length})</p>
               {productList.length === 0 ? (
@@ -262,7 +274,6 @@ function App() {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
