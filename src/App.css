@@ -266,6 +266,7 @@ body {
   border-radius: 10px;
   font-size: 14px;
   background: #fafafa;
+  color: #222;
 }
 
 .form-error { color: #e74c3c; font-size: 12px; text-align: center; }
