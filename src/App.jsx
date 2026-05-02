@@ -54,14 +54,17 @@ function App() {
     if (!name) return;
     const price = parseFloat(window.prompt(`Price (₹):`));
     if (isNaN(price)) return;
-    await supabase.from("products").insert([{ barcode, name, price }]);
+    await supabase.from("products").insert([{ barcode, name, price, shop_id: shop.id }]);
     addItemToBill(barcode, name, price);
   };
 
   const handleScan = async (barcode) => {
     setShowScanner(false);
-    const { data: localProduct } = await supabase
-      .from("products").select("*").eq("barcode", barcode).single();
+   const { data: localProduct } = await supabase
+  .from("products").select("*")
+  .eq("barcode", barcode)
+  .eq("shop_id", shop.id)
+  .single();
     if (localProduct) {
       addItemToBill(barcode, localProduct.name, localProduct.price);
       return;
@@ -111,7 +114,7 @@ function App() {
   };
 
   const loadProducts = async () => {
-    const { data } = await supabase.from("products").select("*").order("name");
+    const { data } = await supabase.from("products").select("*").eq("shop_id", shop.id).order("name");
     if (data) setProductList(data);
   };
 
@@ -120,7 +123,7 @@ function App() {
     const name = document.getElementById("admin-name").value.trim();
     const price = parseFloat(document.getElementById("admin-price").value);
     if (!barcode || !name || isNaN(price)) { alert("Please fill in all fields!"); return; }
-    const { error } = await supabase.from("products").upsert([{ barcode, name, price }]);
+    const { error } = await supabase.from("products").upsert([{ barcode, name, price, shop_id: shop.id }]);
     if (error) { alert("Error: " + error.message); return; }
     document.getElementById("admin-barcode").value = "";
     document.getElementById("admin-name").value = "";
