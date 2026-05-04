@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Scanner from "./Scanner";
 import Login from "./Login";
 import Bill from "./Bill";
+import QRPayment from "./QRPayment";
 import { supabase } from "./supabase";
 import "./App.css";
 
@@ -21,6 +22,9 @@ function App() {
   const [showBill, setShowBill] = useState(false);
   const [lastBillItems, setLastBillItems] = useState([]);
   const [lastTotal, setLastTotal] = useState(0);
+  const [showQR, setShowQR] = useState(false);
+  const [onlineTotal, setOnlineTotal] = useState(0);
+  const [cashTotal, setCashTotal] = useState(0);
 
   useEffect(() => {
     const saved = localStorage.getItem("kirana-shop");
@@ -60,11 +64,11 @@ function App() {
 
   const handleScan = async (barcode) => {
     setShowScanner(false);
-   const { data: localProduct } = await supabase
-  .from("products").select("*")
-  .eq("barcode", barcode)
-  .eq("shop_id", shop.id)
-  .single();
+    const { data: localProduct } = await supabase
+      .from("products").select("*")
+      .eq("barcode", barcode)
+      .eq("shop_id", shop.id)
+      .single();
     if (localProduct) {
       addItemToBill(barcode, localProduct.name, localProduct.price);
       return;
@@ -96,25 +100,52 @@ function App() {
 
   const total = billItems.reduce((s, i) => s + i.price * i.qty, 0);
 
-  const finalizeBill = async () => {
+  const finalizeBill = async (paymentType) => {
     if (billItems.length === 0) return;
+    if (paymentType === "online") {
+      setShowQR(true);
+      return;
+    }
+    await saveBill("cash");
+  };
+
+  const saveBill = async (paymentType) => {
     const { error } = await supabase.from("bills").insert([{
-      total, subtotal: total, gst: 0, items: billItems, shop_id: shop.id,
+      total, subtotal: total, gst: 0,
+      items: billItems, shop_id: shop.id,
+      payment_type: paymentType,
     }]);
     if (error) { alert("Error saving bill: " + error.message); return; }
     setTodayTotal((prev) => prev + total);
+    setOnlineTotal((prev) => paymentType === "online" ? prev + total : prev);
+    setCashTotal((prev) => paymentType === "cash" ? prev + total : prev);
     setBills((prev) => [
-      { time: new Date().toLocaleTimeString(), amount: total, items: billItems.length },
+      { time: new Date().toLocaleTimeString(), amount: total, items: billItems.length, paymentType },
       ...prev,
     ]);
     setLastBillItems([...billItems]);
     setLastTotal(total);
     setBillItems([]);
+    setShowQR(false);
     setShowBill(true);
   };
 
+  const saveUPI = async () => {
+    const upiId = document.getElementById("upi-id").value.trim();
+    if (!upiId) return;
+    const { error } = await supabase.from("shops")
+      .update({ upi_id: upiId })
+      .eq("id", shop.id);
+    if (error) { alert("Error: " + error.message); return; }
+    const updated = { ...shop, upi_id: upiId };
+    localStorage.setItem("kirana-shop", JSON.stringify(updated));
+    setShop(updated);
+    alert("UPI ID saved!");
+  };
+
   const loadProducts = async () => {
-    const { data } = await supabase.from("products").select("*").eq("shop_id", shop.id).order("name");
+    const { data } = await supabase.from("products").select("*")
+      .eq("shop_id", shop.id).order("name");
     if (data) setProductList(data);
   };
 
@@ -145,6 +176,15 @@ function App() {
 
   if (!shop) return <Login onLogin={handleLogin} />;
 
+  if (showQR) return (
+    <QRPayment
+      shop={shop}
+      total={total}
+      onConfirm={() => saveBill("online")}
+      onCancel={() => setShowQR(false)}
+    />
+  );
+
   if (showBill) return (
     <Bill shop={shop} items={lastBillItems} total={lastTotal} onClose={() => setShowBill(false)} />
   );
@@ -166,6 +206,7 @@ function App() {
       </div>
 
       <div className="content">
+
         {activeTab === "billing" && (
           <div>
             {showScanner && <Scanner onScan={handleScan} />}
@@ -200,10 +241,16 @@ function App() {
                     <span>Total Amount</span>
                     <span className="big-total">₹{total}</span>
                   </div>
+                  <p style={{fontSize:"13px", color:"#888", marginBottom:"10px", textAlign:"center"}}>
+                    How is the customer paying?
+                  </p>
                   <div className="action-row">
-                    <button className="clear-btn" onClick={() => setBillItems([])}>Clear</button>
-                    <button className="generate-btn" onClick={finalizeBill}>✓ Done</button>
+                    <button className="pay-cash-btn" onClick={() => finalizeBill("cash")}>💵 Cash</button>
+                    <button className="pay-online-btn" onClick={() => finalizeBill("online")}>📱 Online</button>
                   </div>
+                  <button className="clear-btn" style={{width:"100%", marginTop:"10px"}} onClick={() => setBillItems([])}>
+                    Clear Bill
+                  </button>
                 </div>
               </div>
             )}
@@ -230,6 +277,19 @@ function App() {
                   <p className="summary-label">Total collected today</p>
                   <p className="summary-amount">₹{todayTotal}</p>
                   <p className="summary-bills">{bills.length} bills generated</p>
+                  <div className="payment-split">
+                    <div className="split-item">
+                      <span className="split-icon">💵</span>
+                      <span className="split-label">Cash</span>
+                      <span className="split-amt">₹{cashTotal}</span>
+                    </div>
+                    <div className="split-divider"></div>
+                    <div className="split-item">
+                      <span className="split-icon">📱</span>
+                      <span className="split-label">Online</span>
+                      <span className="split-amt">₹{onlineTotal}</span>
+                    </div>
+                  </div>
                 </div>
                 {bills.length === 0 ? (
                   <p className="placeholder-text">No bills yet today</p>
@@ -237,7 +297,7 @@ function App() {
                   bills.map((b, i) => (
                     <div className="bill-item" key={i}>
                       <div className="item-info">
-                        <p className="item-name">{b.items} items</p>
+                        <p className="item-name">{b.items} items · {b.paymentType === "online" ? "📱 Online" : "💵 Cash"}</p>
                         <p className="item-price">{b.time}</p>
                       </div>
                       <div className="item-total">₹{b.amount}</div>
@@ -251,8 +311,14 @@ function App() {
 
         {activeTab === "admin" && (
           <div>
-            <p className="admin-heading">Add products with fixed prices</p>
+            <p className="admin-heading">Manage your shop settings</p>
             <div className="admin-form">
+              <p style={{fontSize:"13px", fontWeight:"600", marginBottom:"4px"}}>Your UPI ID</p>
+              <div style={{display:"flex", gap:"8px", marginBottom:"16px"}}>
+                <input id="upi-id" placeholder="e.g. shopname@upi" defaultValue={shop.upi_id || ""} />
+                <button className="generate-btn" style={{flex:"0 0 auto", padding:"11px 16px"}} onClick={saveUPI}>Save</button>
+              </div>
+              <p style={{fontSize:"13px", fontWeight:"600", marginBottom:"4px"}}>Add Products</p>
               <input id="admin-barcode" placeholder="Barcode number" type="number" />
               <input id="admin-name" placeholder="Product name (e.g. Boost 500ml)" />
               <input id="admin-price" placeholder="Price (₹)" type="number" />
@@ -277,6 +343,7 @@ function App() {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
