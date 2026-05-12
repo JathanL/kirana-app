@@ -12,25 +12,27 @@ function Login({ onLogin }) {
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!shopName || !phone || !password || !address || !ownerName) {
-      setError("Please fill in all fields!"); return;
-    }
-    setLoading(true);
-    const { data, error } = await supabase.from("shops").insert([{
-      shop_name: shopName,
-      owner_name: ownerName,
-      phone,
-      address,
-      password,
-    }]).select().single();
+  if (!shopName || !phone || !password || !address || !ownerName) {
+    setError("Please fill in all fields!"); return;
+  }
+  setLoading(true);
+  setError("");
+  
+  const { data, error } = await supabase.from("shops").insert([{
+    shop_name: shopName,
+    owner_name: ownerName,
+    phone: phone.toString(),
+    address,
+    password,
+  }]).select().single();
 
-    if (error) {
-      setError("Phone number already registered!"); 
-      setLoading(false); return;
-    }
-    onLogin(data);
-    setLoading(false);
-  };
+  if (error) {
+    setError("Error: " + error.message);
+    setLoading(false); return;
+  }
+  onLogin(data);
+  setLoading(false);
+};
 
   const handleLogin = async () => {
     if (!phone || !password) {
