@@ -6,7 +6,6 @@ import QRPayment from "./QRPayment";
 import { supabase } from "./supabase";
 import "./App.css";
 
-const ADMIN_PASSWORD = "shop123";
 
 function App() {
   const [shop, setShop] = useState(null);
@@ -169,9 +168,9 @@ function App() {
   };
 
   const checkPassword = () => {
-    if (passwordInput === ADMIN_PASSWORD) {
-      setShowSummary(true); setWrongPassword(false);
-    } else { setWrongPassword(true); }
+  if (passwordInput === shop.password) {
+    setShowSummary(true); setWrongPassword(false);
+  } else { setWrongPassword(true); }
   };
 
   if (!shop) return <Login onLogin={handleLogin} />;
