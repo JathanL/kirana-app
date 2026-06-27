@@ -24,6 +24,8 @@ function App() {
   const [showQR, setShowQR] = useState(false);
   const [onlineTotal, setOnlineTotal] = useState(0);
   const [cashTotal, setCashTotal] = useState(0);
+  const [editingItem, setEditingItem] = useState(null);
+  const [editPrice, setEditPrice] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem("kirana-shop");
@@ -62,28 +64,41 @@ function App() {
   };
 
   const handleScan = async (barcode) => {
-    setShowScanner(false);
-    const { data: localProduct } = await supabase
-      .from("products").select("*")
-      .eq("barcode", barcode)
-      .eq("shop_id", shop.id)
-      .single();
-    if (localProduct) {
-      addItemToBill(barcode, localProduct.name, localProduct.price);
-      return;
+  setShowScanner(false);
+
+  const { data: localProduct } = await supabase
+    .from("products").select("*")
+    .eq("barcode", barcode)
+    .eq("shop_id", shop.id)
+    .single();
+
+  if (localProduct) {
+    addItemToBill(barcode, localProduct.name, localProduct.price);
+    return;
+  }
+
+  const { data: masterProduct } = await supabase
+    .from("master_products").select("*")
+    .eq("barcode", barcode)
+    .single();
+
+  if (masterProduct) {
+    addItemToBill(barcode, masterProduct.name, masterProduct.price);
+    return;
+  }
+
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+    const data = await res.json();
+    if (data.status === 1) {
+      promptDetails(barcode, data.product.product_name || "");
+    } else {
+      promptDetails(barcode, "");
     }
-    try {
-      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-      const data = await res.json();
-      if (data.status === 1) {
-        promptPrice(barcode, data.product.product_name || "");
-      } else {
-        promptPrice(barcode, "");
-      }
-    } catch {
-      promptPrice(barcode, "");
-    }
-  };
+  } catch {
+    promptDetails(barcode, "");
+  }
+};
 
   const changeQty = (barcode, delta) => {
     setBillItems((prev) =>
@@ -161,7 +176,18 @@ function App() {
     alert(name + " saved!");
     loadProducts();
   };
-
+  const addMasterProduct = async () => {
+  const barcode = document.getElementById("master-barcode").value.trim();
+  const name = document.getElementById("master-name").value.trim();
+  const price = parseFloat(document.getElementById("master-price").value);
+  if (!barcode || !name || isNaN(price)) { alert("Please fill in all fields!"); return; }
+  const { error } = await supabase.from("master_products").upsert([{ barcode, name, price }]);
+  if (error) { alert("Error: " + error.message); return; }
+  document.getElementById("master-barcode").value = "";
+  document.getElementById("master-name").value = "";
+  document.getElementById("master-price").value = "";
+  alert(name + " added to master database!");
+};
   const deleteProduct = async (id) => {
     await supabase.from("products").delete().eq("id", id);
     loadProducts();
@@ -221,20 +247,55 @@ function App() {
             ) : (
               <div className="bill-list">
                 {billItems.map((item) => (
-                  <div className="bill-item" key={item.barcode}>
-                    <div className="item-info">
-                      <p className="item-name">{item.name}</p>
-                      <p className="item-price">₹{item.price} × {item.qty}</p>
-                    </div>
-                    <div className="qty-ctrl">
-                      <button onClick={() => changeQty(item.barcode, -1)}>−</button>
-                      <span>{item.qty}</span>
-                      <button onClick={() => changeQty(item.barcode, 1)}>+</button>
-                    </div>
-                    <div className="item-total">₹{item.price * item.qty}</div>
-                    <button className="remove-btn" onClick={() => removeItem(item.barcode)}>×</button>
-                  </div>
-                ))}
+  <div className="bill-item" key={item.barcode}>
+    <div className="item-info">
+      <p className="item-name">{item.name}</p>
+      {editingItem === item.barcode ? (
+        <div style={{display:"flex", gap:"6px", alignItems:"center", marginTop:"4px"}}>
+          <span style={{fontSize:"12px"}}>₹</span>
+          <input
+            type="number"
+            value={editPrice}
+            onChange={(e) => setEditPrice(e.target.value)}
+            style={{width:"70px", padding:"3px 6px", border:"1px solid #1a472a", borderRadius:"6px", fontSize:"13px"}}
+            autoFocus
+          />
+          <button
+            onClick={() => {
+              const newPrice = parseFloat(editPrice);
+              if (!isNaN(newPrice)) {
+                setBillItems((prev) => prev.map((i) =>
+                  i.barcode === item.barcode ? { ...i, price: newPrice } : i
+                ));
+              }
+              setEditingItem(null);
+            }}
+            style={{background:"#1a472a", color:"white", border:"none", borderRadius:"6px", padding:"3px 8px", fontSize:"12px", cursor:"pointer"}}
+          >
+            ✓
+          </button>
+          <button
+            onClick={() => setEditingItem(null)}
+            style={{background:"#eee", border:"none", borderRadius:"6px", padding:"3px 8px", fontSize:"12px", cursor:"pointer"}}
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <p className="item-price" onClick={() => { setEditingItem(item.barcode); setEditPrice(item.price.toString()); }} style={{cursor:"pointer"}}>
+          ₹{item.price} × {item.qty} <span style={{color:"#1a472a", fontSize:"11px"}}>✏️ edit</span>
+        </p>
+      )}
+    </div>
+    <div className="qty-ctrl">
+      <button onClick={() => changeQty(item.barcode, -1)}>−</button>
+      <span>{item.qty}</span>
+      <button onClick={() => changeQty(item.barcode, 1)}>+</button>
+    </div>
+    <div className="item-total">₹{item.price * item.qty}</div>
+    <button className="remove-btn" onClick={() => removeItem(item.barcode)}>×</button>
+  </div>
+))}
                 <div className="bill-footer">
                   <div className="bill-total-row">
                     <span>Total Amount</span>
@@ -340,6 +401,20 @@ function App() {
                 ))
               )}
             </div>
+            <div style={{marginTop:"20px"}}>
+  <p className="admin-list-title">Master Product Database</p>
+  <p style={{fontSize:"12px", color:"#888", marginBottom:"10px"}}>
+    Products added here are available to ALL shops
+  </p>
+  <div className="admin-form">
+    <input id="master-barcode" placeholder="Barcode number" type="number" />
+    <input id="master-name" placeholder="Product name (e.g. Boost 500ml)" />
+    <input id="master-price" placeholder="MRP Price (₹)" type="number" />
+    <button className="generate-btn" onClick={addMasterProduct}>
+      + Add to Master Database
+    </button>
+  </div>
+</div>
           </div>
         )}
 
