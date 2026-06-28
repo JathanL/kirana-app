@@ -5,6 +5,7 @@ import Bill from "./Bill";
 import QRPayment from "./QRPayment";
 import { supabase } from "./supabase";
 import "./App.css";
+import LooseBarcodes from "./LooseBarcodes";
 
 
 function App() {
@@ -26,7 +27,7 @@ function App() {
   const [cashTotal, setCashTotal] = useState(0);
   const [editingItem, setEditingItem] = useState(null);
   const [editPrice, setEditPrice] = useState("");
-
+  const [showLooseBarcodes, setShowLooseBarcodes] = useState(false);
   useEffect(() => {
     const saved = localStorage.getItem("kirana-shop");
     if (saved) setShop(JSON.parse(saved));
@@ -73,7 +74,11 @@ function App() {
     .single();
 
   if (localProduct) {
-    addItemToBill(barcode, localProduct.name, localProduct.price);
+    if (localProduct.is_loose) {
+      handleLooseItem(barcode, localProduct.name, localProduct.price, localProduct.unit);
+    } else {
+      addItemToBill(barcode, localProduct.name, localProduct.price);
+    }
     return;
   }
 
@@ -83,7 +88,23 @@ function App() {
     .single();
 
   if (masterProduct) {
-    addItemToBill(barcode, masterProduct.name, masterProduct.price);
+    if (masterProduct.is_loose) {
+      const rate = parseFloat(window.prompt(
+        `Set your rate for ${masterProduct.name} (per ${masterProduct.unit}):`
+      ));
+      if (isNaN(rate)) return;
+      await supabase.from("products").insert([{
+        barcode,
+        name: masterProduct.name,
+        price: rate,
+        shop_id: shop.id,
+        is_loose: true,
+        unit: masterProduct.unit
+      }]);
+      handleLooseItem(barcode, masterProduct.name, rate, masterProduct.unit);
+    } else {
+      addItemToBill(barcode, masterProduct.name, masterProduct.price);
+    }
     return;
   }
 
@@ -98,6 +119,25 @@ function App() {
   } catch {
     promptDetails(barcode, "");
   }
+};
+
+const handleLooseItem = (barcode, name, ratePerUnit, unit) => {
+  const qty = parseFloat(window.prompt(
+    `${name}\nRate: ₹${ratePerUnit}/${unit}\n\nEnter quantity (${unit}):`
+  ));
+  if (isNaN(qty) || qty <= 0) return;
+  const price = Math.round(ratePerUnit * qty * 100) / 100;
+  const uniqueBarcode = barcode + "_" + Date.now();
+  setBillItems((prev) => [
+    ...prev,
+    {
+      barcode: uniqueBarcode,
+      name: `${name} (${qty}${unit})`,
+      price,
+      qty: 1,
+      isLoose: true
+    }
+  ]);
 };
 
   const changeQty = (barcode, delta) => {
@@ -179,13 +219,22 @@ function App() {
   const addMasterProduct = async () => {
   const barcode = document.getElementById("master-barcode").value.trim();
   const name = document.getElementById("master-name").value.trim();
-  const price = parseFloat(document.getElementById("master-price").value);
-  if (!barcode || !name || isNaN(price)) { alert("Please fill in all fields!"); return; }
-  const { error } = await supabase.from("master_products").upsert([{ barcode, name, price }]);
+  const isLoose = document.getElementById("master-loose").checked;
+  const unit = document.getElementById("master-unit").value;
+  const price = isLoose ? 0 : parseFloat(document.getElementById("master-price").value);
+
+  if (!barcode || !name) { alert("Please fill in all fields!"); return; }
+  if (!isLoose && isNaN(price)) { alert("Please enter price!"); return; }
+
+  const { error } = await supabase.from("master_products").upsert([{
+    barcode, name, price, is_loose: isLoose, unit
+  }]);
   if (error) { alert("Error: " + error.message); return; }
+
   document.getElementById("master-barcode").value = "";
   document.getElementById("master-name").value = "";
   document.getElementById("master-price").value = "";
+  document.getElementById("master-loose").checked = false;
   alert(name + " added to master database!");
 };
   const deleteProduct = async (id) => {
@@ -198,7 +247,9 @@ function App() {
     setShowSummary(true); setWrongPassword(false);
   } else { setWrongPassword(true); }
   };
-
+  if (showLooseBarcodes) return (
+  <LooseBarcodes onClose={() => setShowLooseBarcodes(false)} />
+);
   if (!shop) return <Login onLogin={handleLogin} />;
 
   if (showQR) return (
@@ -372,6 +423,12 @@ function App() {
         {activeTab === "admin" && (
           <div>
             <p className="admin-heading">Manage your shop settings</p>
+            <button
+  style={{width:"100%", marginBottom:"16px", padding:"12px", border:"2px solid #1a472a", color:"#1a472a", background:"white", borderRadius:"12px", fontSize:"14px", fontWeight:"600", cursor:"pointer"}}
+  onClick={() => setShowLooseBarcodes(true)}
+>
+  🏷️ View & Print Loose Item Barcodes
+</button>
             <div className="admin-form">
               <p style={{fontSize:"13px", fontWeight:"600", marginBottom:"4px"}}>Your UPI ID</p>
               <div style={{display:"flex", gap:"8px", marginBottom:"16px"}}>
@@ -401,15 +458,36 @@ function App() {
                 ))
               )}
             </div>
-            <div style={{marginTop:"20px"}}>
+           <div style={{marginTop:"20px"}}>
   <p className="admin-list-title">Master Product Database</p>
   <p style={{fontSize:"12px", color:"#888", marginBottom:"10px"}}>
-    Products added here are available to ALL shops
+    Products here are available to ALL shops
   </p>
   <div className="admin-form">
-    <input id="master-barcode" placeholder="Barcode number" type="number" />
-    <input id="master-name" placeholder="Product name (e.g. Boost 500ml)" />
-    <input id="master-price" placeholder="MRP Price (₹)" type="number" />
+    <input id="master-barcode" placeholder="Barcode (e.g. LOOSE001 or scan)" type="text" />
+    <input id="master-name" placeholder="Product name (e.g. Rice, Maggi)" />
+    <div style={{display:"flex", alignItems:"center", gap:"10px", padding:"8px 0"}}>
+      <input id="master-loose" type="checkbox" style={{width:"18px", height:"18px"}}
+        onChange={(e) => {
+          document.getElementById("master-price-div").style.display = e.target.checked ? "none" : "block";
+          document.getElementById("master-unit-div").style.display = e.target.checked ? "block" : "none";
+        }}
+      />
+      <label htmlFor="master-loose" style={{fontSize:"14px"}}>
+        Loose item (rice, dal, sugar etc.)
+      </label>
+    </div>
+    <div id="master-unit-div" style={{display:"none"}}>
+      <select id="master-unit" style={{padding:"11px 14px", border:"1.5px solid #e8e8e8", borderRadius:"10px", fontSize:"14px", background:"#fafafa", width:"100%"}}>
+        <option value="kg">kg</option>
+        <option value="g">grams</option>
+        <option value="litre">litre</option>
+        <option value="ml">ml</option>
+      </select>
+    </div>
+    <div id="master-price-div">
+      <input id="master-price" placeholder="MRP Price (₹) — for packed items" type="number" />
+    </div>
     <button className="generate-btn" onClick={addMasterProduct}>
       + Add to Master Database
     </button>
