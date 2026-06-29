@@ -155,13 +155,9 @@ const handleLooseItem = (barcode, name, ratePerUnit, unit) => {
   const total = billItems.reduce((s, i) => s + i.price * i.qty, 0);
 
   const finalizeBill = async (paymentType) => {
-    if (billItems.length === 0) return;
-    if (paymentType === "online") {
-      setShowQR(true);
-      return;
-    }
-    await saveBill("cash");
-  };
+  if (billItems.length === 0) return;
+  await saveBill(paymentType);
+};
 
   const saveBill = async (paymentType) => {
     const { error } = await supabase.from("bills").insert([{
